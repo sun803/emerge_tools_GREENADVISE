@@ -227,6 +227,10 @@ class MainWindow(QMainWindow):
         self._show_initial_selection()
 
         QTimer.singleShot(0, self._prompt_api_key)
+        # Pre-warm QtWebEngine (Chromium) so the GPU process and shader cache are
+        # ready before the user clicks START. Without this, the first QWebEngineView
+        # instantiation blocks the UI thread while shaders compile (3-10 s freeze).
+        QTimer.singleShot(200, self._prewarm_webengine)
 
     def _prompt_api_key(self):
         dlg = ApiKeyDialog(current_key=get_ninja_api_key(), parent=self)
@@ -237,6 +241,16 @@ class MainWindow(QMainWindow):
             screen.center().y() - dlg.height() // 2,
         )
         dlg.exec_()
+
+    def _prewarm_webengine(self):
+        from PyQt5.QtWebEngineWidgets import QWebEngineView
+        from PyQt5.QtCore import QUrl
+        # A hidden 1×1 view is enough to start the GPU process and compile shaders.
+        # Kept alive as self._warmup_view so it isn't garbage-collected prematurely.
+        self._warmup_view = QWebEngineView()
+        self._warmup_view.setFixedSize(1, 1)
+        self._warmup_view.setVisible(False)
+        self._warmup_view.load(QUrl("about:blank"))
 
     def _init_toolbar(self):
         self.toolbar = QToolBar("Main Toolbar")
